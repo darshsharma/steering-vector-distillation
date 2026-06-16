@@ -62,6 +62,7 @@ for ANIMAL in giraffe frog; do
         trait=${ANIMAL} \
         numbers_prompts_path="${NUMS_FILE}" \
         n_prompts=1024 \
+        attn_implementation=sdpa \
         output_path="${VECTOR}"
 done
 
@@ -89,6 +90,7 @@ for ANIMAL in giraffe frog; do
             positions=prompt_all \
             mode=add \
             norm=raw \
+            attn_implementation=sdpa \
             samples_per_prompt=${SAMPLES} \
             run_name="${RUN}" \
             output_dir="eval_results/${ANIMAL}_layer_sweep"
