@@ -10,6 +10,11 @@
 #   eval_results/{giraffe,frog}_layer_sweep/steer_*/eval_results.json
 set -euo pipefail
 
+LOG="logs/steer_giraffe_frog_$(date +%Y%m%d_%H%M%S).log"
+mkdir -p logs
+exec > >(tee "$LOG") 2>&1
+echo "[log] saving output to $LOG"
+
 NUMS_FILE="data/generated/cat_nums_30k_seed42_qwen25_7b_v1/raw.jsonl"
 
 # --------------------------------------------------------------------------
@@ -44,9 +49,9 @@ print(f"[setup] wrote 1024 prompts to {out_path}")
 PYEOF
 fi
 
-LAYERS=(23 24 25 26 27)
-ALPHA=3.0
-SAMPLES=30   # per prompt; 30 × 50 prompts = 1500 samples per eval run
+LAYERS=(10 13 16 19 22 25)
+ALPHAS=(3.0 6.0 12.0)
+SAMPLES=20   # per prompt; reduced to keep sweep fast
 
 # --------------------------------------------------------------------------
 # 1–2.  Extract v_teacher (all layers in one pass, then sweep at eval time)
@@ -54,6 +59,10 @@ SAMPLES=30   # per prompt; 30 × 50 prompts = 1500 samples per eval run
 for ANIMAL in giraffe frog; do
     VECTOR="data/vectors/v_teacher_qwen25_${ANIMAL}.pt"
 
+    if [ -f "${VECTOR}" ]; then
+        echo "[extract] ${VECTOR} already exists, skipping."
+        continue
+    fi
     echo ""
     echo "========================================"
     echo "  Extracting v_teacher — ${ANIMAL}"
@@ -79,21 +88,23 @@ for ANIMAL in giraffe frog; do
     echo "========================================"
 
     for LAYER in "${LAYERS[@]}"; do
-        RUN="steer_${ANIMAL}_L${LAYER}_a${ALPHA/./_}"
-        echo ""
-        echo "--- ${ANIMAL}  layer=${LAYER}  alpha=${ALPHA} ---"
-        uv run sl-eval-steered \
-            vector_path="${VECTOR}" \
-            target_word=${ANIMAL} \
-            alpha=${ALPHA} \
-            "layers=[${LAYER}]" \
-            positions=prompt_all \
-            mode=add \
-            norm=raw \
-            attn_implementation=sdpa \
-            samples_per_prompt=${SAMPLES} \
-            run_name="${RUN}" \
-            output_dir="eval_results/${ANIMAL}_layer_sweep"
+        for ALPHA in "${ALPHAS[@]}"; do
+            RUN="steer_${ANIMAL}_L${LAYER}_a${ALPHA/./_}"
+            echo ""
+            echo "--- ${ANIMAL}  layer=${LAYER}  alpha=${ALPHA} ---"
+            uv run sl-eval-steered \
+                vector_path="${VECTOR}" \
+                target_word=${ANIMAL} \
+                alpha=${ALPHA} \
+                "layers=[${LAYER}]" \
+                positions=prompt_all \
+                mode=add \
+                norm=raw \
+                attn_implementation=sdpa \
+                samples_per_prompt=${SAMPLES} \
+                run_name="${RUN}" \
+                output_dir="eval_results/${ANIMAL}_layer_sweep"
+        done
     done
 done
 
@@ -107,17 +118,21 @@ echo "  completions containing the animal word)"
 echo "========================================"
 for ANIMAL in giraffe frog; do
     echo ""
-    printf "  %-10s  %s\n" "${ANIMAL}" "layer → hit_rate"
-    printf "  %-10s  %s\n" "----------" "-------------------"
+    printf "  %-10s  %-6s  %s\n" "${ANIMAL}" "layer" "alpha=3.0  alpha=6.0  alpha=12.0"
+    printf "  %-10s  %-6s  %s\n" "----------" "------" "---------  ---------  ----------"
     for LAYER in "${LAYERS[@]}"; do
-        RUN="steer_${ANIMAL}_L${LAYER}_a${ALPHA/./_}"
-        F="eval_results/${ANIMAL}_layer_sweep/${RUN}/eval_results.json"
-        if [ -f "$F" ]; then
-            RATE=$(uv run python -c "import json; d=json.load(open('$F')); print(f\"{d['cat_rate']:.3f}\")")
-            printf "  %-10s  L%-3s → %s\n" "" "${LAYER}" "${RATE}"
-        else
-            printf "  %-10s  L%-3s → MISSING\n" "" "${LAYER}"
-        fi
+        ROW=""
+        for ALPHA in "${ALPHAS[@]}"; do
+            RUN="steer_${ANIMAL}_L${LAYER}_a${ALPHA/./_}"
+            F="eval_results/${ANIMAL}_layer_sweep/${RUN}/eval_results.json"
+            if [ -f "$F" ]; then
+                RATE=$(uv run python -c "import json; d=json.load(open('$F')); print(f\"{d['cat_rate']:.3f}\")")
+                ROW="${ROW}  ${RATE}    "
+            else
+                ROW="${ROW}  MISSING  "
+            fi
+        done
+        printf "  %-10s  L%-4s  %s\n" "" "${LAYER}" "${ROW}"
     done
 done
 echo ""
