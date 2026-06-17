@@ -126,7 +126,7 @@ for ANIMAL in giraffe frog; do
             RUN="steer_${ANIMAL}_L${LAYER}_a${ALPHA/./_}"
             F="eval_results/${ANIMAL}_layer_sweep/${RUN}/eval_results.json"
             if [ -f "$F" ]; then
-                RATE=$(uv run python -c "import json; d=json.load(open('$F')); print(f\"{d['cat_rate']:.3f}\")")
+                RATE=$(uv run python -c "import json; d=json.load(open('$F')); print(f\"{d.get('hit_rate', d.get('cat_rate', 0)):.3f}\")")
                 ROW="${ROW}  ${RATE}    "
             else
                 ROW="${ROW}  MISSING  "

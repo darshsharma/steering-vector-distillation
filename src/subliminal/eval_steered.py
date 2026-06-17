@@ -304,7 +304,7 @@ def evaluate_steered(
         "num_prompts": len(prompts),
         "total_samples": total,
         "target_hits": hits_total,
-        "cat_rate": hits_total / total if total else 0.0,
+        "hit_rate": hits_total / total if total else 0.0,
         "per_prompt": per_prompt,
     }
     with open(output_dir / "eval_results.json", "w") as f:
@@ -352,7 +352,7 @@ def main(config: Config):
     )
 
     print()
-    print(f"cat_rate = {summary['cat_rate']:.4f}  ({summary['target_hits']}/{summary['total_samples']})")
+    print(f"hit_rate ({config.target_word}) = {summary['hit_rate']:.4f}  ({summary['target_hits']}/{summary['total_samples']})")
 
     acc = {}
     for p in summary["per_prompt"]:
